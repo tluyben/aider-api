@@ -72,7 +72,7 @@ async def collect_aider_output(message: str, files: Optional[dict[str, str]], au
         # Prepare the aider command
         cmd = [
             aider_path,
-            "--message", shlex.quote(message)}",
+            "--message", shlex.quote(message),
             "--stream" if not dry_run else "--no-stream",
             "--auto-commits" if auto_commits else "--no-auto-commits",
             "--dirty-commits" if dirty_commits else "--no-dirty-commits",

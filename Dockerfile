@@ -12,8 +12,11 @@ COPY requirements.txt .
 # Install requirements with --upgrade to ensure latest aider-chat
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# Upgrade aider-chat again separately to ensure latest version
-RUN pip install --no-cache-dir --upgrade aider-chat
+# start a venv 
+RUN python -m venv venv
+RUN . venv/bin/activate
+
+RUN ./venv/bin/python -m pip install --upgrade aider-chat
 
 # Copy application code
 COPY . .

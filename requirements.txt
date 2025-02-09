@@ -1,7 +1,7 @@
-fastapi==0.68.1
-uvicorn==0.15.0
-python-multipart==0.0.5
-pydantic==1.8.2
-aider-chat
-pytest==7.3.1
-requests==2.31.0
+fastapi
+uvicorn
+python-multipart
+pydantic
+# aider-chat
+pytest
+requests

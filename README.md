@@ -35,6 +35,12 @@ source venv/bin/activate  # On Windows, use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+4. Make sure we have the latest aider
+
+```
+venv/bin/python -m pip install --upgrade aider-chat
+```
+
 4. Run the server
 
 ```

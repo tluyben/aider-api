@@ -36,6 +36,7 @@ ENV/
 *.log
 logs/
 log/
+aider_api.log
 
 # Test coverage
 .coverage

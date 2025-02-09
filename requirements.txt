@@ -5,3 +5,4 @@ pydantic
 # aider-chat
 pytest
 requests
+urllib3

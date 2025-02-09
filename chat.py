@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
+import readline
 import requests
 import sys
 from typing import Dict
@@ -21,8 +23,17 @@ def main():
             print(f"Error reading {file}: {e}", file=sys.stderr)
             sys.exit(1)
 
+    # Set up readline history
+    histfile = os.path.join(os.path.expanduser("~"), ".aider_chat_history")
+    try:
+        readline.read_history_file(histfile)
+        readline.set_history_length(1000)
+    except FileNotFoundError:
+        pass
+
     print("Chat session started. Type your messages (Ctrl+C to exit)")
     print("Files being edited:", list(files.keys()) or "none")
+    print("Use Up/Down arrows for history")
     
     while True:
         try:
@@ -90,6 +101,7 @@ def main():
 
         except KeyboardInterrupt:
             print("\nExiting chat session")
+            readline.write_history_file(histfile)
             break
         except requests.exceptions.RequestException as e:
             print(f"Error communicating with API: {e}", file=sys.stderr)

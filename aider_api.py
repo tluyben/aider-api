@@ -11,21 +11,6 @@ import shutil
 import logging
 import shlex
 
-HELP_TEXT = """
-Available Commands:
-/help - Show this help message
-/dry-run - Run in dry-run mode without making changes
-/auto-commits - Toggle auto commits (default: on)
-/dirty-commits - Toggle dirty commits (default: on)
-
-Usage:
-1. Send a message describing the changes you want
-2. Include file contents if needed using the 'files' parameter
-3. Use commands to control behavior
-
-For more details, visit: https://aider.chat/docs/
-"""
-
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -46,13 +31,6 @@ class AiderRequest(BaseModel):
 
 async def collect_aider_output(message: str, files: Optional[dict[str, str]], auto_commits: bool, 
                             dirty_commits: bool, dry_run: bool, root: str = "."):
-    
-    # Handle help command
-    if message.strip().lower() == "/help":
-        return {
-            "raw-stdout": HELP_TEXT,
-            "raw-stderr": ""
-        }
     
     logger.debug(f"Starting stream_aider_output with message: {message}")
     logger.debug(f"Files to process: {list(files.keys()) if files else 'None'}")

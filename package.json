@@ -1,0 +1,23 @@
+{
+  "name": "aider-api",
+  "version": "1.0.0",
+  "description": "TypeScript version of Aider API server",
+  "main": "dist/aider_api.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/aider_api.js",
+    "dev": "ts-node src/aider_api.ts"
+  },
+  "dependencies": {
+    "fastify": "^4.24.3",
+    "fastify-cors": "^6.0.3",
+    "pino": "^8.16.1",
+    "temp": "^0.9.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.7",
+    "@types/temp": "^0.9.3",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}

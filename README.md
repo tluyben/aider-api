@@ -13,7 +13,35 @@ A FastAPI-based API server that provides an interface to run Aider commands via 
 
 ## Installation
 
-### Local Setup with venv
+### TypeScript Version
+
+The API server is also available as a TypeScript implementation that provides the same functionality as the Python version.
+
+#### TypeScript Setup
+
+0. First follow the Python steps as we need the venv for the latest Aider
+
+1. Install Node.js dependencies:
+
+```bash
+npm install
+```
+
+2. Build the TypeScript code:
+
+```bash
+npm run build
+```
+
+3. Run the server:
+
+```bash
+npm start
+```
+
+The TypeScript version supports the same command line arguments and API functionality as the Python version.
+
+### Python Version Setup with venv
 
 1. Clone the repository:
 
@@ -48,6 +76,7 @@ python3 aider_api.py [--host HOST] [--port PORT]
 ```
 
 The server can be configured with the following command line arguments:
+
 - `--host`: Host to listen on (default: 127.0.0.1)
 - `--port`: Port to listen on (default: 8000)
 
@@ -77,10 +106,12 @@ python3 chat.py [--port PORT] [files ...]
 ```
 
 Options:
+
 - `--port`: Port number where the API server is running (default: 8000)
 - `files`: Optional list of files to edit in the chat session
 
 The chat script allows you to:
+
 - Interactively send messages to the API
 - Edit multiple files in a session
 - See stdout/stderr output clearly separated
@@ -163,8 +194,8 @@ fetch("http://localhost:8000/run-aider", {
     },
   }),
 })
-  .then(response => response.json())
-  .then(data => {
+  .then((response) => response.json())
+  .then((data) => {
     console.log("STDOUT:", data["raw-stdout"]);
     console.log("STDERR:", data["raw-stderr"]);
     if (data.error) {
@@ -197,6 +228,7 @@ python3 aider_api.py [--host HOST] [--port PORT]
 ```
 
 Arguments:
+
 - `--host`: Host to listen on (default: 127.0.0.1)
 - `--port`: Port to listen on (default: 8000)
 

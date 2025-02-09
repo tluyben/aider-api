@@ -43,6 +43,19 @@ aider_api.log
 htmlcov/
 .pytest_cache/
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# TypeScript
+dist/
+*.tsbuildinfo
+.tscache/
+
 # Docker
 .docker/
 .aider*

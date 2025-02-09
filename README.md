@@ -171,7 +171,6 @@ fetch("http://localhost:8000/run-aider", {
       console.log("ERROR:", data.error);
     }
   });
-});
 ```
 
 ## Development

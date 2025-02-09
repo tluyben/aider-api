@@ -9,6 +9,7 @@ from typing import Optional
 import tempfile
 import shutil
 import logging
+import shlex
 
 # Configure logging
 logging.basicConfig(
@@ -49,25 +50,24 @@ async def collect_aider_output(message: str, files: Optional[dict[str, str]], au
         # Prepare the aider command
         cmd = [
             aider_path,
-            "--message", message,
+            "--message", shlex.quote(message)}",
             "--stream" if not dry_run else "--no-stream",
             "--auto-commits" if auto_commits else "--no-auto-commits",
             "--dirty-commits" if dirty_commits else "--no-dirty-commits",
             "--dry-run" if dry_run else "--no-dry-run", 
+            "--no-show-model-warnings", # Do not show model warnings
             "--yes"  # Automatically confirm any prompts
         ]
         
         # Add model if specified in environment
-        if "AIDER_MODEL" in os.environ:
-            cmd.extend(["--model", os.environ["AIDER_MODEL"]])
+        # if "AIDER_MODEL" in os.environ:
+        #     cmd.extend(["--model", f'"{os.environ["AIDER_MODEL"]}"'])
             
         # Add files if provided
         if files:
             cmd.extend([os.path.join(temp_dir, f) for f in files.keys()])
 
-        logger.debug(f"Executing command: {' '.join(cmd)}")
         logger.debug(f"Working directory: {os.path.abspath(root)}")
-        
         logger.debug(f"Using aider from: {aider_path}")
         logger.debug(f"Executing command: {' '.join(cmd)}")
         

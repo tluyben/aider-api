@@ -1,0 +1,12 @@
+services:
+  aider-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=info
+    restart: unless-stopped

@@ -67,7 +67,22 @@ def main():
                     if in_file_section and current_file:
                         file_content.append(line)
                     else:
-                        print(line)
+                        try:
+                            result = json.loads(line)
+                            if 'raw-stdout' in result:
+                                if result['raw-stdout']:
+                                    print("STDOUT:")
+                                    print(result['raw-stdout'])
+                            if 'raw-stderr' in result:
+                                if result['raw-stderr']:
+                                    print("STDERR:")
+                                    print(result['raw-stderr'])
+                            if 'error' in result and result['error']:
+                                print("ERROR:")
+                                print(result['error'])
+                        except json.JSONDecodeError:
+                            # If it's not JSON, print the line as-is
+                            print(line)
 
                 # Handle the last file if any
                 if current_file and file_content:

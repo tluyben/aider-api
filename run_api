@@ -3,5 +3,5 @@
 python -m venv venv
 source venv/bin/activate
 
-export AIDER_MODEL=anthropic/claude-3.5-sonnet:beta
+export AIDER_MODEL=openrouter/anthropic/claude-3.5-sonnet:beta
 python ./aider_api.py

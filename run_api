@@ -4,4 +4,5 @@ python -m venv venv
 source venv/bin/activate
 
 export AIDER_MODEL=openrouter/anthropic/claude-3.5-sonnet:beta
-python ./aider_api.py
+# Pass all arguments to the Python script
+python ./aider_api.py "$@"

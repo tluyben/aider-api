@@ -159,5 +159,13 @@ async def run_aider(request: AiderRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Run the Aider API server')
+    parser.add_argument('--host', default='127.0.0.1', help='Host to listen on (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=8000, help='Port to listen on (default: 8000)')
+    
+    args = parser.parse_args()
+    uvicorn.run(app, host=args.host, port=args.port)

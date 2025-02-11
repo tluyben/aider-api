@@ -1,5 +1,6 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 import subprocess
 import asyncio
@@ -10,6 +11,7 @@ import tempfile
 import shutil
 import logging
 import shlex
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -28,9 +30,10 @@ class AiderRequest(BaseModel):
     dirty_commits: bool = True
     dry_run: bool = False
     root: str = "."  # Directory to run aider in, defaults to current directory
+    stream: bool = True  # Whether to stream the response using SSE
 
 async def collect_aider_output(message: str, files: Optional[dict[str, str]], auto_commits: bool, 
-                            dirty_commits: bool, dry_run: bool, root: str = "."):
+                            dirty_commits: bool, dry_run: bool, root: str = ".", stream: bool = True):
     
     logger.debug(f"Starting stream_aider_output with message: {message}")
     logger.debug(f"Files to process: {list(files.keys()) if files else 'None'}")
@@ -89,59 +92,99 @@ async def collect_aider_output(message: str, files: Optional[dict[str, str]], au
             }
 
         # Collect output
-        stdout_lines = []
-        stderr_lines = []
-        
-        while True:
-            try:
-                # Read from stdout and stderr concurrently
-                stdout_data, stderr_data = await asyncio.gather(
-                    process.stdout.read(),
-                    process.stderr.read()
-                )
+        if stream:
+            async def event_generator():
+                stdout_lines = []
+                stderr_lines = []
                 
-                if stdout_data:
-                    stdout_lines.extend(stdout_data.decode().splitlines(True))
-                if stderr_data:
-                    stderr_lines.extend(stderr_data.decode().splitlines(True))
-                    
-                if not stdout_data and not stderr_data:
-                    break
-                    
-            except Exception as e:
-                logger.error(f"Error processing output: {e}")
-                stderr_lines.append(f"Error: Failed to process output: {e}\n")
-                break
+                while True:
+                    try:
+                        # Read from stdout and stderr concurrently
+                        stdout_data, stderr_data = await asyncio.gather(
+                            process.stdout.readline(),
+                            process.stderr.readline()
+                        )
+                        
+                        if stdout_data:
+                            line = stdout_data.decode().rstrip()
+                            stdout_lines.append(line + "\n")
+                            yield {
+                                "event": "progress",
+                                "data": json.dumps({"type": "stdout", "content": line})
+                            }
+                        if stderr_data:
+                            line = stderr_data.decode().rstrip()
+                            stderr_lines.append(line + "\n")
+                            yield {
+                                "event": "progress",
+                                "data": json.dumps({"type": "stderr", "content": line})
+                            }
+                            
+                        if not stdout_data and not stderr_data:
+                            # Process complete, send final result
+                            result = {
+                                "raw-stdout": "".join(stdout_lines),
+                                "raw-stderr": "".join(stderr_lines)
+                            }
+                            
+                            if "https://aider.chat/docs/troubleshooting" in result["raw-stdout"]:
+                                result["error"] = "something went wrong"
+                                if "models-and-keys.html" in result["raw-stdout"]:
+                                    result["error"] += ", AI key or model not found"
+                            
+                            yield {
+                                "event": "complete",
+                                "data": json.dumps(result)
+                            }
+                            break
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing output: {e}")
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({"error": f"Failed to process output: {e}"})
+                        }
+                        break
 
-        # Wait for the process to complete if no errors
-        await process.wait()
-
-        # If not a dry run and files were provided, read the modified files and yield their contents
-        # if not dry_run and files:
-        #     yield "\n--- Modified Files ---\n"
-        #     for filename in files.keys():
-        #         file_path = os.path.join(temp_dir, filename)
-        #         if os.path.exists(file_path):
-        #             with open(file_path, 'r') as f:
-        #                 content = f.read()
-        #             yield f"\n--- {filename} ---\n{content}\n"
-
-        # Return collected output
-
-        return_content = {
-            "raw-stdout": "".join(stdout_lines),
-            "raw-stderr": "".join(stderr_lines)
-        }
-
-        # if the raw-stdout contains https://aider.chat/docs/troubleshooting then we add a error: 'something went wrong' to the return_content  
-        if "https://aider.chat/docs/troubleshooting" in return_content["raw-stdout"]:
-            return_content["error"] = "something went wrong"
+            return event_generator()
+        else:
+            # Non-streaming mode
+            stdout_lines = []
+            stderr_lines = []
             
-            # now we figure WHAT went wrong, if the stdout contains 'models-and-keys.html' then we add a error: 'model not found' to the return_content
-            if "models-and-keys.html" in return_content["raw-stdout"]:
-                return_content["error"] += ", AI key or model not found"            
+            while True:
+                try:
+                    stdout_data, stderr_data = await asyncio.gather(
+                        process.stdout.read(),
+                        process.stderr.read()
+                    )
+                    
+                    if stdout_data:
+                        stdout_lines.extend(stdout_data.decode().splitlines(True))
+                    if stderr_data:
+                        stderr_lines.extend(stderr_data.decode().splitlines(True))
+                        
+                    if not stdout_data and not stderr_data:
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"Error processing output: {e}")
+                    stderr_lines.append(f"Error: Failed to process output: {e}\n")
+                    break
 
-        return return_content
+            await process.wait()
+
+            result = {
+                "raw-stdout": "".join(stdout_lines),
+                "raw-stderr": "".join(stderr_lines)
+            }
+
+            if "https://aider.chat/docs/troubleshooting" in result["raw-stdout"]:
+                result["error"] = "something went wrong"
+                if "models-and-keys.html" in result["raw-stdout"]:
+                    result["error"] += ", AI key or model not found"
+
+            return result
 
 @app.post("/run-aider")
 async def run_aider(request: AiderRequest):
@@ -152,9 +195,14 @@ async def run_aider(request: AiderRequest):
             request.auto_commits,
             request.dirty_commits,
             request.dry_run,
-            request.root
+            request.root,
+            request.stream
         )
-        return JSONResponse(content=result)
+        
+        if request.stream:
+            return EventSourceResponse(result)
+        else:
+            return JSONResponse(content=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

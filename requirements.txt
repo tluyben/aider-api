@@ -1,5 +1,7 @@
 fastapi
 uvicorn
+sse-starlette
+sseclient-py
 python-multipart
 pydantic
 # aider-chat

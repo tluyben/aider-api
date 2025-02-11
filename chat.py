@@ -4,12 +4,14 @@ import json
 import os
 import readline
 import requests
+import sseclient
 import sys
 from typing import Dict
 
 def main():
     parser = argparse.ArgumentParser(description='Interactive chat with Aider API')
     parser.add_argument('--port', type=int, default=8000, help='Port number (default: 8000)')
+    parser.add_argument('--no-stream', action='store_true', help='Disable streaming mode')
     parser.add_argument('files', nargs='*', help='Initial files to edit')
     args = parser.parse_args()
 
@@ -49,55 +51,46 @@ def main():
                 "files": files,
                 "auto_commits": True,
                 "dirty_commits": True,
-                "dry_run": False
+                "dry_run": False,
+                "stream": not args.no_stream
             }
 
-            # Make the request and stream the response
-            with requests.post(url, json=data, stream=True) as response:
+            if args.no_stream:
+                # Non-streaming mode: Get JSON response
+                response = requests.post(url, json=data)
                 response.raise_for_status()
-                in_file_section = False
-                current_file = None
-                file_content = []
-
-                for line in response.iter_lines(decode_unicode=True):
-                    if not line:
-                        continue
-
-                    # Check for file section markers
-                    if line == "--- Modified Files ---":
-                        in_file_section = True
-                        continue
-                    elif in_file_section and line.startswith("--- ") and line.endswith(" ---"):
-                        if current_file and file_content:
-                            # Update the files dict with the new content
-                            files[current_file] = "\n".join(file_content)
-                            file_content = []
-                        current_file = line[4:-4]  # Extract filename from "--- filename ---"
-                        continue
-                    
-                    if in_file_section and current_file:
-                        file_content.append(line)
-                    else:
-                        try:
-                            result = json.loads(line)
-                            if 'raw-stdout' in result:
-                                if result['raw-stdout']:
-                                    print("STDOUT:")
-                                    print(result['raw-stdout'])
-                            if 'raw-stderr' in result:
-                                if result['raw-stderr']:
-                                    print("STDERR:")
-                                    print(result['raw-stderr'])
-                            if 'error' in result and result['error']:
-                                print("ERROR:")
-                                print(result['error'])
-                        except json.JSONDecodeError:
-                            # If it's not JSON, print the line as-is
-                            print(line)
-
-                # Handle the last file if any
-                if current_file and file_content:
-                    files[current_file] = "\n".join(file_content)
+                result = response.json()
+                
+                if result.get('raw-stdout'):
+                    print("STDOUT:")
+                    print(result['raw-stdout'])
+                if result.get('raw-stderr'):
+                    print("STDERR:")
+                    print(result['raw-stderr'])
+                if result.get('error'):
+                    print("ERROR:")
+                    print(result['error'])
+            else:
+                # Streaming mode: Handle SSE events
+                headers = {'Accept': 'text/event-stream'}
+                response = requests.post(url, json=data, stream=True, headers=headers)
+                response.raise_for_status()
+                
+                client = sseclient.SSEClient(response)
+                for event in client.events():
+                    if event.event == 'progress':
+                        data = json.loads(event.data)
+                        if data['type'] == 'stdout':
+                            print(data['content'])
+                        elif data['type'] == 'stderr':
+                            print("STDERR:", data['content'], file=sys.stderr)
+                    elif event.event == 'complete':
+                        result = json.loads(event.data)
+                        if result.get('error'):
+                            print("ERROR:", result['error'], file=sys.stderr)
+                    elif event.event == 'error':
+                        data = json.loads(event.data)
+                        print("ERROR:", data.get('error', 'Unknown error'), file=sys.stderr)
 
         except KeyboardInterrupt:
             print("\nExiting chat session")

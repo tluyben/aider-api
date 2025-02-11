@@ -35,6 +35,7 @@ interface AiderRequest {
   dirty_commits: boolean;
   dry_run: boolean;
   root?: string;
+  stream?: boolean;
 }
 
 interface AiderResponse {
@@ -60,8 +61,9 @@ async function collectAiderOutput(
   auto_commits: boolean,
   dirty_commits: boolean,
   dry_run: boolean,
-  root: string = "."
-): Promise<AiderResponse> {
+  root: string = ".",
+  stream: boolean = true
+): Promise<AiderResponse | AsyncGenerator<string, void, unknown>> {
   logger.debug(`Starting collectAiderOutput with message: ${message}`);
   logger.debug(`Files to process: ${files ? Object.keys(files) : 'None'}`);
 
@@ -95,38 +97,91 @@ async function collectAiderOutput(
       env: process.env
     });
 
-    let stdoutData = '';
-    let stderrData = '';
+    if (stream) {
+      // Streaming mode using SSE
+      return (async function* () {
+        let stdoutLines: string[] = [];
+        let stderrLines: string[] = [];
 
-    // Collect output
-    childProcess.stdout.on('data', (data: Buffer) => {
-      stdoutData += data.toString();
-    });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            childProcess.stdout.on('data', (data: Buffer) => {
+              const line = data.toString().trim();
+              if (line) {
+                stdoutLines.push(line + '\n');
+                return `event: progress\ndata: ${JSON.stringify({ type: 'stdout', content: line })}\n\n`;
+              }
+            });
 
-    childProcess.stderr.on('data', (data: Buffer) => {
-      stderrData += data.toString();
-    });
+            childProcess.stderr.on('data', (data: Buffer) => {
+              const line = data.toString().trim();
+              if (line) {
+                stderrLines.push(line + '\n');
+                return `event: progress\ndata: ${JSON.stringify({ type: 'stderr', content: line })}\n\n`;
+              }
+            });
 
-    // Wait for process to complete
-    const exitCode = await new Promise<number>((resolve) => {
-      childProcess.on('close', resolve);
-    });
+            childProcess.on('close', () => {
+              const result: AiderResponse = {
+                'raw-stdout': stdoutLines.join(''),
+                'raw-stderr': stderrLines.join('')
+              };
 
-    const response: AiderResponse = {
-      'raw-stdout': stdoutData,
-      'raw-stderr': stderrData
-    };
+              if (result['raw-stdout'].includes('https://aider.chat/docs/troubleshooting')) {
+                result.error = 'something went wrong';
+                if (result['raw-stdout'].includes('models-and-keys.html')) {
+                  result.error += ', AI key or model not found';
+                }
+              }
 
-    // Check for specific error conditions in stdout
-    if (stdoutData.includes('https://aider.chat/docs/troubleshooting')) {
-      response.error = 'something went wrong';
-      
-      if (stdoutData.includes('models-and-keys.html')) {
-        response.error += ', AI key or model not found';
+              return `event: complete\ndata: ${JSON.stringify(result)}\n\n`;
+              resolve();
+            });
+
+            childProcess.on('error', (error) => {
+              return `event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`;
+              reject(error);
+            });
+          });
+        } catch (error) {
+          yield `event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`;
+        }
+      })();
+    } else {
+      // Non-streaming mode
+      let stdoutData = '';
+      let stderrData = '';
+
+      // Collect output
+      childProcess.stdout.on('data', (data: Buffer) => {
+        stdoutData += data.toString();
+      });
+
+      childProcess.stderr.on('data', (data: Buffer) => {
+        stderrData += data.toString();
+      });
+
+      // Wait for process to complete
+      const exitCode = await new Promise<number>((resolve) => {
+        childProcess.on('close', resolve);
+      });
+
+      const response: AiderResponse = {
+        'raw-stdout': stdoutData,
+        'raw-stderr': stderrData
+      };
+
+      // Check for specific error conditions in stdout
+      if (stdoutData.includes('https://aider.chat/docs/troubleshooting')) {
+        response.error = 'something went wrong';
+        
+        if (stdoutData.includes('models-and-keys.html')) {
+          response.error += ', AI key or model not found';
+        }
       }
-    }
 
-    return response;
+      return response;
+    }
 
   } catch (error) {
     logger.error(`Error: Failed to execute aider process: ${error instanceof Error ? error.message : String(error)}`);
@@ -140,16 +195,43 @@ async function collectAiderOutput(
 // Define the POST endpoint
 app.post('/run-aider', async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const { message, files, auto_commits, dirty_commits, dry_run, root } = request.body as AiderRequest;
+    const { message, files, auto_commits, dirty_commits, dry_run, root, stream = true } = request.body as AiderRequest;
     const result = await collectAiderOutput(
       message,
       files,
       auto_commits,
       dirty_commits,
       dry_run,
-      root
+      root,
+      stream
     );
-    return result;
+
+    if (stream) {
+      reply.raw.setHeader('Content-Type', 'text/event-stream');
+      reply.raw.setHeader('Cache-Control', 'no-cache');
+      reply.raw.setHeader('Connection', 'keep-alive');
+
+      // Handle client disconnect
+      request.raw.on('close', () => {
+        reply.raw.end();
+      });
+
+      // Stream SSE events
+      try {
+        for await (const event of result as AsyncGenerator<string, void, unknown>) {
+          if (event) {
+            reply.raw.write(event);
+          }
+        }
+      } catch (error) {
+        logger.error(`Error streaming events: ${error}`);
+        reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+      } finally {
+        reply.raw.end();
+      }
+    } else {
+      return result;
+    }
   } catch (error) {
     logger.error(`Error in /run-aider endpoint: ${error instanceof Error ? error.message : String(error)}`);
     reply.status(500).send({ error: error instanceof Error ? error.message : String(error) });
